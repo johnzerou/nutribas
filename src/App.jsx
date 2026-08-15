@@ -5,6 +5,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Pacientes from './pages/Pacientes';
+import NovoPaciente from './pages/NovoPaciente';
+import PacienteDetalhes from './pages/PacienteDetalhes';
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useAuth();
@@ -60,10 +62,18 @@ function App() {
             } 
           />
           <Route 
+            path="/pacientes/novo" 
+            element={
+              <ProtectedRoute>
+                <NovoPaciente />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
             path="/pacientes/:id" 
             element={
               <ProtectedRoute>
-                <Pacientes />
+                <PacienteDetalhes />
               </ProtectedRoute>
             } 
           />
