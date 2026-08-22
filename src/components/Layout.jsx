@@ -1,6 +1,8 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import Logo from './Logo';
+import ThemeToggle from './ThemeToggle';
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -15,8 +17,7 @@ export default function Layout({ children }) {
     <div className="app-layout">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="brand-logo">Nutribas</div>
-          <span className="brand-badge">Gestão Nutricional</span>
+          <Logo to="/" showSubtitle size="medium" />
         </div>
 
         <nav className="sidebar-nav">
@@ -42,6 +43,11 @@ export default function Layout({ children }) {
         </nav>
 
         <div className="sidebar-footer">
+          <div className="sidebar-theme-row">
+            <span className="sidebar-footer-label">Tema da interface</span>
+            <ThemeToggle size="small" />
+          </div>
+
           <div className="user-profile-preview">
             <div className="user-avatar">
               {user?.nome ? user.nome.charAt(0).toUpperCase() : 'N'}
@@ -65,6 +71,9 @@ export default function Layout({ children }) {
           <div className="header-greeting">
             <h2>Olá, {user?.nome ? user.nome.split(' ')[0] : 'Nutricionista'} 👋</h2>
             <p>Acompanhe aqui o resumo dos seus atendimentos e pacientes.</p>
+          </div>
+          <div className="header-actions">
+            <ThemeToggle />
           </div>
         </header>
         <div className="page-body">

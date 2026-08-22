@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { sql } from '../lib/db';
+import ImageUpload from '../components/ImageUpload';
 
 export default function NovoPaciente() {
   const { user } = useAuth();
@@ -15,6 +16,10 @@ export default function NovoPaciente() {
 
   // Aba 1 - Pessoal
   const [nome, setNome] = useState('');
+  const [fotoUrl, setFotoUrl] = useState('');
+  const [dataInicioTratamento, setDataInicioTratamento] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
   const [dataNascimento, setDataNascimento] = useState('');
   const [sexo, setSexo] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
@@ -152,45 +157,22 @@ export default function NovoPaciente() {
     }
     if (clean.length === 2) {
       const num = parseInt(clean, 10);
-      if (num <= 23) {
-        return `${clean.padStart(2, '0')}:00`;
+      if (num >= 0 && num <= 23) {
+        return `${clean}:00`;
       }
       return `${clean[0]}:0${clean[1]}`;
     }
     if (clean.length === 3) {
-      const h = `0${clean[0]}`;
-      const m = clean.slice(1, 3);
-      return `${h}:${m}`;
+      return `0${clean[0]}:${clean.slice(1)}`;
     }
     if (clean.length >= 4) {
-      const h = clean.slice(0, 2);
-      const m = clean.slice(2, 4);
-      return `${h}:${m}`;
+      return `${clean.slice(0, 2)}:${clean.slice(2, 4)}`;
     }
     return raw;
   };
 
-  // Helper para múltipla escolha com suporte a "Nenhum"
-  const toggleMultiSelect = (item, currentList, setList) => {
-    if (item === 'Nenhum') {
-      if (currentList.includes('Nenhum')) {
-        setList([]);
-      } else {
-        setList(['Nenhum']);
-      }
-      return;
-    }
-
-    const withoutNenhum = currentList.filter(i => i !== 'Nenhum');
-    if (withoutNenhum.includes(item)) {
-      setList(withoutNenhum.filter(i => i !== item));
-    } else {
-      setList([...withoutNenhum, item]);
-    }
-  };
-
-  // Toggle simples de lista
-  const toggleItem = (item, currentList, setList) => {
+  // Handlers para seleção de múltiplos chips
+  const toggleChipSelection = (item, currentList, setList) => {
     if (currentList.includes(item)) {
       setList(currentList.filter(i => i !== item));
     } else {
@@ -198,8 +180,68 @@ export default function NovoPaciente() {
     }
   };
 
+  // Manipulação de Patologias com suporte a "Nenhum"
+  const togglePatologia = (item) => {
+    if (item === 'Nenhum') {
+      if (patologiasSelecionadas.includes('Nenhum')) {
+        setPatologiasSelecionadas([]);
+      } else {
+        setPatologiasSelecionadas(['Nenhum']);
+        setPatologiaLivre('');
+      }
+      return;
+    }
+
+    const novaLista = patologiasSelecionadas.filter(p => p !== 'Nenhum');
+    if (novaLista.includes(item)) {
+      setPatologiasSelecionadas(novaLista.filter(p => p !== item));
+    } else {
+      setPatologiasSelecionadas([...novaLista, item]);
+    }
+  };
+
+  // Manipulação de Restrições com suporte a "Nenhuma"
+  const toggleRestricao = (item) => {
+    if (item === 'Nenhum') {
+      if (restricoesSelecionadas.includes('Nenhum')) {
+        setRestricoesSelecionadas([]);
+      } else {
+        setRestricoesSelecionadas(['Nenhum']);
+        setRestricaoLivre('');
+      }
+      return;
+    }
+
+    const novaLista = restricoesSelecionadas.filter(r => r !== 'Nenhum');
+    if (novaLista.includes(item)) {
+      setRestricoesSelecionadas(novaLista.filter(r => r !== item));
+    } else {
+      setRestricoesSelecionadas([...novaLista, item]);
+    }
+  };
+
+  // Manipulação de Alergias com suporte a "Nenhuma"
+  const toggleAlergia = (item) => {
+    if (item === 'Nenhum') {
+      if (alergiasSelecionadas.includes('Nenhum')) {
+        setAlergiasSelecionadas([]);
+      } else {
+        setAlergiasSelecionadas(['Nenhum']);
+        setAlergiaLivre('');
+      }
+      return;
+    }
+
+    const novaLista = alergiasSelecionadas.filter(a => a !== 'Nenhum');
+    if (novaLista.includes(item)) {
+      setAlergiasSelecionadas(novaLista.filter(a => a !== item));
+    } else {
+      setAlergiasSelecionadas([...novaLista, item]);
+    }
+  };
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
@@ -241,6 +283,8 @@ export default function NovoPaciente() {
         INSERT INTO public.pacientes (
           nutricionista_id,
           nome,
+          foto_url,
+          data_inicio_tratamento,
           data_nascimento,
           sexo,
           whatsapp,
@@ -265,6 +309,8 @@ export default function NovoPaciente() {
         ) VALUES (
           ${user.id},
           ${nome.trim()},
+          ${fotoUrl || null},
+          ${dataInicioTratamento || null},
           ${dataNascimento ? dataNascimento : null},
           ${sexo || null},
           ${whatsapp || null},
@@ -292,10 +338,32 @@ export default function NovoPaciente() {
 
       if (result && result.length > 0) {
         const newPatient = result[0];
+
+        // Se informou a data de início do tratamento ou peso inicial, registra a 1ª consulta automaticamente
+        if (dataInicioTratamento) {
+          try {
+            await sql`
+              INSERT INTO public.consultas (
+                paciente_id,
+                data_consulta,
+                peso,
+                observacoes
+              ) VALUES (
+                ${newPatient.id},
+                ${dataInicioTratamento},
+                ${pesoAtual ? parseFloat(pesoAtual) : null},
+                'Primeira consulta (início do tratamento)'
+              )
+            `;
+          } catch (cErr) {
+            console.warn('Aviso: Não foi possível registrar a 1ª consulta inicial automaticamente:', cErr);
+          }
+        }
+
         setSuccessMessage(`Paciente ${newPatient.nome} cadastrado com sucesso! Redirecionando...`);
         setTimeout(() => {
           navigate(`/pacientes/${newPatient.id}`);
-        }, 1200);
+        }, 1000);
       } else {
         throw new Error('Falha ao registrar paciente.');
       }
@@ -375,62 +443,86 @@ export default function NovoPaciente() {
             {activeTab === 'pessoal' && (
               <div className="tab-content animate-fade">
                 <div className="form-section-title">
-                  <h3>Dados Pessoais</h3>
-                  <p>Informações básicas de identificação e contato do paciente.</p>
+                  <h3>Dados Pessoais & Foto</h3>
+                  <p>Informações básicas de identificação, foto e contato do paciente.</p>
                 </div>
 
-                <div className="form-grid-2">
-                  <div className="form-group full-width">
-                    <label>Nome completo <span className="required-star">*</span></label>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: Maria Silva"
-                      value={nome}
-                      onChange={(e) => setNome(e.target.value)}
-                      required
+                <div className="patient-photo-and-personal-grid">
+                  {/* Foto do Paciente */}
+                  <div className="photo-upload-container">
+                    <label className="section-label">Foto do Paciente</label>
+                    <ImageUpload 
+                      value={fotoUrl} 
+                      onChange={setFotoUrl} 
+                      name={nome} 
+                      size={100}
                     />
                   </div>
 
-                  <div className="form-group">
-                    <label>Data de nascimento</label>
-                    <input 
-                      type="date" 
-                      value={dataNascimento}
-                      onChange={(e) => setDataNascimento(e.target.value)}
-                    />
-                    {idadeCalculada !== null && (
-                      <span className="helper-badge">{idadeCalculada} anos</span>
-                    )}
-                  </div>
+                  {/* Campos Pessoais */}
+                  <div className="form-grid-2">
+                    <div className="form-group full-width">
+                      <label>Nome completo <span className="required-star">*</span></label>
+                      <input 
+                        type="text" 
+                        placeholder="Ex: Maria Silva"
+                        value={nome}
+                        onChange={(e) => setNome(e.target.value)}
+                        required
+                      />
+                    </div>
 
-                  <div className="form-group">
-                    <label>Sexo</label>
-                    <select value={sexo} onChange={(e) => setSexo(e.target.value)}>
-                      <option value="">Selecione...</option>
-                      <option value="Feminino">Feminino</option>
-                      <option value="Masculino">Masculino</option>
-                      <option value="Outro">Outro</option>
-                    </select>
-                  </div>
+                    <div className="form-group">
+                      <label>Data de Início do Tratamento (1ª Consulta)</label>
+                      <input 
+                        type="date" 
+                        value={dataInicioTratamento}
+                        onChange={(e) => setDataInicioTratamento(e.target.value)}
+                      />
+                      <span className="helper-badge">Registrada como primeira consulta</span>
+                    </div>
 
-                  <div className="form-group">
-                    <label>WhatsApp</label>
-                    <input 
-                      type="text" 
-                      placeholder="(99) 99999-9999"
-                      value={whatsapp}
-                      onChange={handleWhatsappChange}
-                    />
-                  </div>
+                    <div className="form-group">
+                      <label>Data de nascimento</label>
+                      <input 
+                        type="date" 
+                        value={dataNascimento}
+                        onChange={(e) => setDataNascimento(e.target.value)}
+                      />
+                      {idadeCalculada !== null && (
+                        <span className="helper-badge">{idadeCalculada} anos</span>
+                      )}
+                    </div>
 
-                  <div className="form-group">
-                    <label>Email</label>
-                    <input 
-                      type="email" 
-                      placeholder="paciente@exemplo.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
+                    <div className="form-group">
+                      <label>Sexo</label>
+                      <select value={sexo} onChange={(e) => setSexo(e.target.value)}>
+                        <option value="">Selecione...</option>
+                        <option value="Feminino">Feminino</option>
+                        <option value="Masculino">Masculino</option>
+                        <option value="Outro">Outro</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label>WhatsApp</label>
+                      <input 
+                        type="text" 
+                        placeholder="(99) 99999-9999"
+                        value={whatsapp}
+                        onChange={handleWhatsappChange}
+                      />
+                    </div>
+
+                    <div className="form-group full-width">
+                      <label>Email</label>
+                      <input 
+                        type="email" 
+                        placeholder="paciente@exemplo.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -451,18 +543,18 @@ export default function NovoPaciente() {
             {activeTab === 'clinico' && (
               <div className="tab-content animate-fade">
                 <div className="form-section-title">
-                  <h3>Avaliação Clínica & Antropométrica</h3>
-                  <p>Métricas corporais, condições de saúde, restrições e objetivos do tratamento.</p>
+                  <h3>Dados Clínicos & Antropométricos</h3>
+                  <p>Métricas corporais, objetivos e histórico de saúde.</p>
                 </div>
 
-                {/* Métricas Corporais & IMC */}
+                {/* Métricas e IMC */}
                 <div className="metrics-row-card">
                   <div className="form-group">
-                    <label>Peso atual</label>
+                    <label>Peso atual (kg)</label>
                     <div className="input-affix-wrapper">
                       <input 
                         type="number" 
-                        step="0.1"
+                        step="0.1" 
                         placeholder="Ex: 72.5"
                         value={pesoAtual}
                         onChange={(e) => setPesoAtual(e.target.value)}
@@ -472,12 +564,12 @@ export default function NovoPaciente() {
                   </div>
 
                   <div className="form-group">
-                    <label>Altura</label>
+                    <label>Altura (cm)</label>
                     <div className="input-affix-wrapper">
                       <input 
                         type="number" 
-                        step="1"
-                        placeholder="Ex: 170"
+                        step="1" 
+                        placeholder="Ex: 168"
                         value={alturaCm}
                         onChange={(e) => setAlturaCm(e.target.value)}
                       />
@@ -485,8 +577,8 @@ export default function NovoPaciente() {
                     </div>
                   </div>
 
-                  <div className="form-group imc-display-box">
-                    <label>IMC (Calculado automaticamente)</label>
+                  <div className="imc-display-box">
+                    <label>IMC Calculado</label>
                     <div className="imc-result">
                       {imcCalculado ? (
                         <>
@@ -494,7 +586,7 @@ export default function NovoPaciente() {
                           <span className="imc-class">{imcCalculado.classificacao}</span>
                         </>
                       ) : (
-                        <span className="imc-placeholder">Preencha peso e altura</span>
+                        <span className="imc-placeholder">Informe peso e altura</span>
                       )}
                     </div>
                   </div>
@@ -502,35 +594,43 @@ export default function NovoPaciente() {
 
                 {/* Objetivos */}
                 <div className="form-group-section">
-                  <label className="section-label">Objetivo do paciente (Múltipla escolha)</label>
+                  <label className="section-label">Objetivos principais</label>
                   <div className="chip-selector-grid">
-                    {OPCOES_OBJETIVO.map((obj) => (
-                      <button
-                        key={obj}
-                        type="button"
-                        className={`chip-btn ${objetivosSelecionados.includes(obj) ? 'selected' : ''}`}
-                        onClick={() => toggleItem(obj, objetivosSelecionados, setObjetivosSelecionados)}
-                      >
-                        {obj}
-                      </button>
-                    ))}
+                    {OPCOES_OBJETIVO.map((obj) => {
+                      const selected = objetivosSelecionados.includes(obj);
+                      return (
+                        <button
+                          key={obj}
+                          type="button"
+                          className={`chip-btn ${selected ? 'selected' : ''}`}
+                          onClick={() => toggleChipSelection(obj, objetivosSelecionados, setObjetivosSelecionados)}
+                        >
+                          {selected && '✓ '}
+                          {obj}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                  <div className="form-group" style={{ marginTop: '1rem' }}>
+                    <label>Detalhes do objetivo / meta do paciente</label>
                     <input 
                       type="text" 
-                      placeholder="Outro objetivo ou observação específica sobre a meta..."
+                      placeholder="Ex: Deseja perder 5kg até o final do ano para correr uma prova de 10km"
                       value={objetivoTexto}
                       onChange={(e) => setObjetivoTexto(e.target.value)}
                     />
                   </div>
                 </div>
 
-                {/* Nível de atividade */}
+                {/* Nível de Atividade */}
                 <div className="form-group-section">
-                  <label className="section-label">Nível de atividade física</label>
+                  <label className="section-label">Nível de atividade física diária</label>
                   <div className="radio-pills-row">
                     {OPCOES_NIVEL_ATIVIDADE.map((nivel) => (
-                      <label key={nivel} className={`radio-pill ${nivelAtividade === nivel ? 'selected' : ''}`}>
+                      <label 
+                        key={nivel} 
+                        className={`radio-pill ${nivelAtividade === nivel ? 'selected' : ''}`}
+                      >
                         <input 
                           type="radio" 
                           name="nivelAtividade" 
@@ -538,7 +638,7 @@ export default function NovoPaciente() {
                           checked={nivelAtividade === nivel}
                           onChange={(e) => setNivelAtividade(e.target.value)}
                         />
-                        {nivel}
+                        <span>{nivel}</span>
                       </label>
                     ))}
                   </div>
@@ -546,120 +646,138 @@ export default function NovoPaciente() {
 
                 {/* Patologias */}
                 <div className="form-group-section">
-                  <label className="section-label">Patologias ou condições de saúde</label>
+                  <label className="section-label">Patologias / Condições de saúde</label>
                   <div className="chip-selector-grid">
                     <button
                       type="button"
                       className={`chip-btn ${patologiasSelecionadas.includes('Nenhum') ? 'selected-none' : ''}`}
-                      onClick={() => toggleMultiSelect('Nenhum', patologiasSelecionadas, setPatologiasSelecionadas)}
+                      onClick={() => togglePatologia('Nenhum')}
                     >
-                      Nenhum
+                      {patologiasSelecionadas.includes('Nenhum') && '✓ '}
+                      Nenhuma
                     </button>
-                    {OPCOES_PATOLOGIAS.map((pat) => (
-                      <button
-                        key={pat}
-                        type="button"
-                        className={`chip-btn ${patologiasSelecionadas.includes(pat) ? 'selected' : ''}`}
-                        onClick={() => toggleMultiSelect(pat, patologiasSelecionadas, setPatologiasSelecionadas)}
-                      >
-                        {pat}
-                      </button>
-                    ))}
+                    {OPCOES_PATOLOGIAS.map((pat) => {
+                      const selected = patologiasSelecionadas.includes(pat);
+                      return (
+                        <button
+                          key={pat}
+                          type="button"
+                          className={`chip-btn ${selected ? 'selected' : ''}`}
+                          onClick={() => togglePatologia(pat)}
+                        >
+                          {selected && '✓ '}
+                          {pat}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="form-group" style={{ marginTop: '0.75rem' }}>
                     <input 
                       type="text" 
-                      placeholder="Outra patologia ou condição não listada..."
+                      placeholder="Outra patologia não listada (opcional)"
                       value={patologiaLivre}
                       onChange={(e) => setPatologiaLivre(e.target.value)}
+                      disabled={patologiasSelecionadas.includes('Nenhum')}
                     />
                   </div>
                 </div>
 
-                {/* Restrições */}
+                {/* Restrições Alimentares */}
                 <div className="form-group-section">
-                  <label className="section-label">Restrições alimentares</label>
+                  <label className="section-label">Restrições alimentares / Intolerâncias</label>
                   <div className="chip-selector-grid">
                     <button
                       type="button"
                       className={`chip-btn ${restricoesSelecionadas.includes('Nenhum') ? 'selected-none' : ''}`}
-                      onClick={() => toggleMultiSelect('Nenhum', restricoesSelecionadas, setRestricoesSelecionadas)}
+                      onClick={() => toggleRestricao('Nenhum')}
                     >
-                      Nenhum
+                      {restricoesSelecionadas.includes('Nenhum') && '✓ '}
+                      Nenhuma
                     </button>
-                    {OPCOES_RESTRICOES.map((res) => (
-                      <button
-                        key={res}
-                        type="button"
-                        className={`chip-btn ${restricoesSelecionadas.includes(res) ? 'selected' : ''}`}
-                        onClick={() => toggleMultiSelect(res, restricoesSelecionadas, setRestricoesSelecionadas)}
-                      >
-                        {res}
-                      </button>
-                    ))}
+                    {OPCOES_RESTRICOES.map((rest) => {
+                      const selected = restricoesSelecionadas.includes(rest);
+                      return (
+                        <button
+                          key={rest}
+                          type="button"
+                          className={`chip-btn ${selected ? 'selected' : ''}`}
+                          onClick={() => toggleRestricao(rest)}
+                        >
+                          {selected && '✓ '}
+                          {rest}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="form-group" style={{ marginTop: '0.75rem' }}>
                     <input 
                       type="text" 
-                      placeholder="Outra restrição alimentar..."
+                      placeholder="Outra restrição alimentar (opcional)"
                       value={restricaoLivre}
                       onChange={(e) => setRestricaoLivre(e.target.value)}
+                      disabled={restricoesSelecionadas.includes('Nenhum')}
                     />
                   </div>
                 </div>
 
                 {/* Alergias */}
                 <div className="form-group-section">
-                  <label className="section-label">Alergias alimentares</label>
+                  <label className="section-label">Alergias diagnosticadas</label>
                   <div className="chip-selector-grid">
                     <button
                       type="button"
                       className={`chip-btn ${alergiasSelecionadas.includes('Nenhum') ? 'selected-none' : ''}`}
-                      onClick={() => toggleMultiSelect('Nenhum', alergiasSelecionadas, setAlergiasSelecionadas)}
+                      onClick={() => toggleAlergia('Nenhum')}
                     >
-                      Nenhum
+                      {alergiasSelecionadas.includes('Nenhum') && '✓ '}
+                      Nenhuma
                     </button>
-                    {OPCOES_ALERGIAS.map((al) => (
-                      <button
-                        key={al}
-                        type="button"
-                        className={`chip-btn ${alergiasSelecionadas.includes(al) ? 'selected' : ''}`}
-                        onClick={() => toggleMultiSelect(al, alergiasSelecionadas, setAlergiasSelecionadas)}
-                      >
-                        {al}
-                      </button>
-                    ))}
+                    {OPCOES_ALERGIAS.map((alerg) => {
+                      const selected = alergiasSelecionadas.includes(alerg);
+                      return (
+                        <button
+                          key={alerg}
+                          type="button"
+                          className={`chip-btn ${selected ? 'selected' : ''}`}
+                          onClick={() => toggleAlergia(alerg)}
+                        >
+                          {selected && '✓ '}
+                          {alerg}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="form-group" style={{ marginTop: '0.75rem' }}>
                     <input 
                       type="text" 
-                      placeholder="Outra alergia alimentar..."
+                      placeholder="Outra alergia (opcional)"
                       value={alergiaLivre}
                       onChange={(e) => setAlergiaLivre(e.target.value)}
+                      disabled={alergiasSelecionadas.includes('Nenhum')}
                     />
                   </div>
                 </div>
 
                 {/* Medicamentos e Suplementos */}
-                <div className="form-grid-2" style={{ marginTop: '1rem' }}>
+                <div className="form-grid-2">
                   <div className="form-group">
                     <label>Medicamentos contínuos</label>
                     <textarea 
-                      rows="3"
-                      placeholder="Ex: Losartana 50mg pela manhã, Metformina..."
+                      rows="3" 
+                      placeholder="Ex: Metformina 500mg (1x ao dia), Losartana..."
                       value={medicamentos}
                       onChange={(e) => setMedicamentos(e.target.value)}
-                    ></textarea>
+                    />
                   </div>
 
                   <div className="form-group">
-                    <label>Suplementos em uso</label>
+                    <label>Suplementos atuais</label>
                     <textarea 
-                      rows="3"
-                      placeholder="Ex: Whey protein 30g pós-treino, Creatina 5g, Vitamina D..."
+                      rows="3" 
+                      placeholder="Ex: Creatina 5g/dia, Whey Protein pós-treino, Vitamina D..."
                       value={suplementos}
                       onChange={(e) => setSuplementos(e.target.value)}
-                    ></textarea>
+                    />
                   </div>
                 </div>
 
@@ -669,7 +787,7 @@ export default function NovoPaciente() {
                     className="btn-secondary"
                     onClick={() => setActiveTab('pessoal')}
                   >
-                    ← Voltar para Pessoal
+                    ← Voltar: Pessoal
                   </button>
                   <button 
                     type="button" 
@@ -686,17 +804,17 @@ export default function NovoPaciente() {
             {activeTab === 'habitos' && (
               <div className="tab-content animate-fade">
                 <div className="form-section-title">
-                  <h3>Rotina & Hábitos de Vida</h3>
-                  <p>Informações sobre rotina de sono, hidratação, refeições e atividade física.</p>
+                  <h3>Hábitos & Rotina de Vida</h3>
+                  <p>Informações sobre rotina, sono, hidratação e atividade física.</p>
                 </div>
 
                 <div className="form-grid-2">
                   <div className="form-group">
-                    <label>Quantas refeições faz por dia?</label>
+                    <label>Número de refeições por dia</label>
                     <input 
                       type="number" 
                       min="1" 
-                      max="12"
+                      max="10" 
                       placeholder="Ex: 4"
                       value={refeicoesPorDia}
                       onChange={(e) => setRefeicoesPorDia(e.target.value)}
@@ -704,7 +822,7 @@ export default function NovoPaciente() {
                   </div>
 
                   <div className="form-group">
-                    <label>Quantidade de água por dia</label>
+                    <label>Consumo diário de água (Litros)</label>
                     <div className="input-affix-wrapper">
                       <input 
                         type="number" 
@@ -713,85 +831,81 @@ export default function NovoPaciente() {
                         value={litrosAgua}
                         onChange={(e) => setLitrosAgua(e.target.value)}
                       />
-                      <span className="input-suffix">litros</span>
+                      <span className="input-suffix">Litros</span>
                     </div>
                   </div>
 
                   <div className="form-group">
-                    <label>Horário que acorda</label>
+                    <label>Horário em que costuma acordar</label>
                     <input 
                       type="text" 
-                      placeholder="Ex: 6 ou 630 (vira 06:30)"
+                      placeholder="Ex: 06:30 ou 6"
                       value={horarioAcordaRaw}
                       onChange={(e) => setHorarioAcordaRaw(e.target.value)}
-                      onBlur={(e) => setHorarioAcordaRaw(formatTime(e.target.value))}
                     />
                     {horarioAcordaRaw && (
-                      <span className="helper-badge">Formato: {formatTime(horarioAcordaRaw)}</span>
+                      <span className="helper-badge">Será salvo como: {formatTime(horarioAcordaRaw)}</span>
                     )}
                   </div>
 
                   <div className="form-group">
-                    <label>Horário que dorme</label>
+                    <label>Horário em que costuma dormir</label>
                     <input 
                       type="text" 
-                      placeholder="Ex: 23 ou 2230 (vira 22:30)"
+                      placeholder="Ex: 23:00 ou 23"
                       value={horarioDormeRaw}
                       onChange={(e) => setHorarioDormeRaw(e.target.value)}
-                      onBlur={(e) => setHorarioDormeRaw(formatTime(e.target.value))}
                     />
                     {horarioDormeRaw && (
-                      <span className="helper-badge">Formato: {formatTime(horarioDormeRaw)}</span>
+                      <span className="helper-badge">Será salvo como: {formatTime(horarioDormeRaw)}</span>
                     )}
                   </div>
-                </div>
 
-                {/* Prática de atividade física */}
-                <div className="form-group-section" style={{ marginTop: '1.25rem' }}>
-                  <label className="section-label">Pratica atividade física?</label>
-                  <div className="radio-pills-row">
-                    <label className={`radio-pill ${praticaAtividadeFisica === true ? 'selected' : ''}`}>
-                      <input 
-                        type="radio" 
-                        name="atividadeFisica" 
-                        checked={praticaAtividadeFisica === true}
-                        onChange={() => setPraticaAtividadeFisica(true)}
-                      />
-                      Sim
-                    </label>
-                    <label className={`radio-pill ${praticaAtividadeFisica === false ? 'selected' : ''}`}>
-                      <input 
-                        type="radio" 
-                        name="atividadeFisica" 
-                        checked={praticaAtividadeFisica === false}
-                        onChange={() => setPraticaAtividadeFisica(false)}
-                      />
-                      Não
-                    </label>
+                  <div className="form-group full-width">
+                    <label className="section-label">Pratica atividade física?</label>
+                    <div className="radio-pills-row">
+                      <label className={`radio-pill ${praticaAtividadeFisica === true ? 'selected' : ''}`}>
+                        <input 
+                          type="radio" 
+                          name="praticaAtividade" 
+                          checked={praticaAtividadeFisica === true}
+                          onChange={() => setPraticaAtividadeFisica(true)}
+                        />
+                        <span>Sim</span>
+                      </label>
+                      <label className={`radio-pill ${praticaAtividadeFisica === false ? 'selected' : ''}`}>
+                        <input 
+                          type="radio" 
+                          name="praticaAtividade" 
+                          checked={praticaAtividadeFisica === false}
+                          onChange={() => setPraticaAtividadeFisica(false)}
+                        />
+                        <span>Não</span>
+                      </label>
+                    </div>
                   </div>
 
                   {praticaAtividadeFisica === true && (
-                    <div className="form-group animate-fade" style={{ marginTop: '0.85rem' }}>
-                      <label>Qual atividade e frequência semanal?</label>
-                      <input 
-                        type="text" 
-                        placeholder="Ex: Musculação 4x na semana + Corrida aos sábados"
+                    <div className="form-group full-width animate-fade">
+                      <label>Quais atividades, frequência e intensidade?</label>
+                      <textarea 
+                        rows="3" 
+                        placeholder="Ex: Musculação 4x na semana (1 hora) e corrida no fim de semana..."
                         value={atividadeFisicaDescricao}
                         onChange={(e) => setAtividadeFisicaDescricao(e.target.value)}
                       />
                     </div>
                   )}
-                </div>
 
-                {/* Observações gerais */}
-                <div className="form-group" style={{ marginTop: '1.25rem' }}>
-                  <label>Observações gerais</label>
-                  <textarea 
-                    rows="4"
-                    placeholder="Anotações adicionais, histórico alimentar, preferências, aversões ou comentários do paciente..."
-                    value={observacoes}
-                    onChange={(e) => setObservacoes(e.target.value)}
-                  ></textarea>
+                  <div className="form-group full-width">
+                    <label>Observações gerais e anotações do nutricionista</label>
+                    <textarea 
+                      rows="4" 
+                      placeholder="Anotações adicionais, histórico familiar, preferências ou comportamento alimentar..."
+                      value={observacoes}
+                      onChange={(e) => setObservacoes(e.target.value)}
+                    />
+                  </div>
                 </div>
 
                 <div className="tab-footer-actions">
@@ -800,14 +914,15 @@ export default function NovoPaciente() {
                     className="btn-secondary"
                     onClick={() => setActiveTab('clinico')}
                   >
-                    ← Voltar para Clínico
+                    ← Voltar: Clínico
                   </button>
                   <button 
-                    type="submit" 
-                    disabled={saving} 
+                    type="button" 
                     className="btn-primary"
+                    onClick={handleSubmit}
+                    disabled={saving}
                   >
-                    {saving ? 'Salvando Paciente...' : '✓ Concluir e Salvar Paciente'}
+                    {saving ? 'Salvando Paciente...' : '✓ Concluir Cadastro'}
                   </button>
                 </div>
               </div>

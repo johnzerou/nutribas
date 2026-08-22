@@ -58,6 +58,7 @@ export default function Dashboard() {
           SELECT 
             p.id,
             p.nome,
+            p.foto_url,
             p.whatsapp,
             uc.data_consulta as ultima_consulta_data,
             uc.proximo_retorno
@@ -180,8 +181,16 @@ export default function Dashboard() {
                         onKeyDown={(e) => e.key === 'Enter' && handlePatientClick(paciente.id)}
                       >
                         <div className="patient-main-info">
-                          <div className="patient-avatar-mini">
-                            {paciente.nome.charAt(0).toUpperCase()}
+                          <div className="patient-avatar-mini" style={{ overflow: 'hidden', padding: 0 }}>
+                            {paciente.foto_url ? (
+                              <img 
+                                src={paciente.foto_url} 
+                                alt={paciente.nome} 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                              />
+                            ) : (
+                              paciente.nome.charAt(0).toUpperCase()
+                            )}
                           </div>
                           <div>
                             <span className="patient-name-link">{paciente.nome}</span>

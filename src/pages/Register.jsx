@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import Logo from '../components/Logo';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function Register() {
   const [nome, setNome] = useState('');
@@ -41,8 +43,13 @@ export default function Register() {
 
   return (
     <div className="auth-container">
+      <div className="auth-top-actions">
+        <ThemeToggle />
+      </div>
       <div className="auth-box">
-        <div className="auth-logo">Nutribas</div>
+        <div className="auth-logo-header">
+          <Logo size="large" showSubtitle />
+        </div>
         {error && <div className="error-message">{error}</div>}
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="form-group">

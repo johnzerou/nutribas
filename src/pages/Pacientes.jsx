@@ -32,6 +32,7 @@ export default function Pacientes() {
           SELECT 
             p.id,
             p.nome,
+            p.foto_url,
             p.objetivos,
             p.objetivo_texto,
             p.email,
@@ -153,8 +154,16 @@ export default function Pacientes() {
                 onKeyDown={(e) => e.key === 'Enter' && navigate(`/pacientes/${paciente.id}`)}
               >
                 <div className="patient-card-top">
-                  <div className="patient-avatar-badge">
-                    {paciente.nome.charAt(0).toUpperCase()}
+                  <div className="patient-avatar-badge" style={{ overflow: 'hidden', padding: 0 }}>
+                    {paciente.foto_url ? (
+                      <img 
+                        src={paciente.foto_url} 
+                        alt={paciente.nome} 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      />
+                    ) : (
+                      paciente.nome.charAt(0).toUpperCase()
+                    )}
                   </div>
                   <div className="patient-card-titles">
                     <h3 className="patient-card-name">{paciente.nome}</h3>
