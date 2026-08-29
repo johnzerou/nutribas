@@ -4,6 +4,23 @@ import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { sql } from '../lib/db';
 import ImageUpload from '../components/ImageUpload';
+import CalculadoraMetabolica from '../components/CalculadoraMetabolica';
+import { 
+  UserIcon, 
+  ScaleIcon, 
+  CalendarIcon, 
+  CheckIcon, 
+  ArrowLeftIcon, 
+  CalculatorIcon, 
+  PlusIcon, 
+  FlameIcon,
+  TargetIcon,
+  AlertTriangleIcon,
+  ShieldAlertIcon,
+  PillIcon,
+  DumbbellIcon,
+  WaterIcon
+} from '../components/Icons';
 
 export default function NovoPaciente() {
   const { user } = useAuth();
@@ -13,6 +30,7 @@ export default function NovoPaciente() {
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [isCalculadoraOpen, setIsCalculadoraOpen] = useState(false);
 
   // Aba 1 - Pessoal
   const [nome, setNome] = useState('');
@@ -393,15 +411,28 @@ export default function NovoPaciente() {
               onClick={() => navigate('/pacientes')} 
               className="btn-secondary"
             >
-              Cancelar
+              <ArrowLeftIcon size={16} />
+              <span>Cancelar</span>
             </button>
+
+            <button 
+              type="button" 
+              className="btn-secondary btn-calc-header"
+              onClick={() => setIsCalculadoraOpen(true)}
+              title="Calcular TMB, GET e Macronutrientes"
+            >
+              <CalculatorIcon size={16} />
+              <span>Calculadora Metabólica</span>
+            </button>
+
             <button 
               type="button" 
               onClick={handleSubmit} 
               disabled={saving} 
               className="btn-primary"
             >
-              {saving ? 'Salvando...' : 'Salvar Paciente'}
+              <CheckIcon size={16} />
+              <span>{saving ? 'Salvando...' : 'Salvar Paciente'}</span>
             </button>
           </div>
         </div>
@@ -417,24 +448,24 @@ export default function NovoPaciente() {
               className={`tab-btn ${activeTab === 'pessoal' ? 'active' : ''}`}
               onClick={() => setActiveTab('pessoal')}
             >
-              <span className="tab-number">1</span>
-              <span>Pessoal</span>
+              <UserIcon size={16} />
+              <span>1. Pessoal</span>
             </button>
             <button 
               type="button"
               className={`tab-btn ${activeTab === 'clinico' ? 'active' : ''}`}
               onClick={() => setActiveTab('clinico')}
             >
-              <span className="tab-number">2</span>
-              <span>Clínico</span>
+              <ScaleIcon size={16} />
+              <span>2. Clínico</span>
             </button>
             <button 
               type="button"
               className={`tab-btn ${activeTab === 'habitos' ? 'active' : ''}`}
               onClick={() => setActiveTab('habitos')}
             >
-              <span className="tab-number">3</span>
-              <span>Hábitos</span>
+              <CalendarIcon size={16} />
+              <span>3. Hábitos</span>
             </button>
           </div>
 
@@ -914,7 +945,8 @@ export default function NovoPaciente() {
                     className="btn-secondary"
                     onClick={() => setActiveTab('clinico')}
                   >
-                    ← Voltar: Clínico
+                    <ArrowLeftIcon size={16} />
+                    <span>Voltar: Clínico</span>
                   </button>
                   <button 
                     type="button" 
@@ -922,13 +954,44 @@ export default function NovoPaciente() {
                     onClick={handleSubmit}
                     disabled={saving}
                   >
-                    {saving ? 'Salvando Paciente...' : '✓ Concluir Cadastro'}
+                    <CheckIcon size={16} />
+                    <span>{saving ? 'Salvando Paciente...' : 'Concluir Cadastro'}</span>
                   </button>
                 </div>
               </div>
             )}
           </form>
         </div>
+
+        {/* Modal da Calculadora Metabólica */}
+        {isCalculadoraOpen && (
+          <CalculadoraMetabolica
+            paciente={{
+              nome,
+              sexo,
+              idade: idadeCalculada || 30,
+              peso: pesoAtual || 70,
+              peso_inicial: pesoAtual || 70,
+              altura: alturaCm || 170
+            }}
+            onClose={() => setIsCalculadoraOpen(false)}
+            onAplicarMeta={(calc) => {
+              if (calc.aguaRecomendada) {
+                setLitrosAgua(calc.aguaRecomendada);
+              }
+              const metaStr = `• Meta Prescrita: ${calc.metaCalorica} kcal/dia (Proteínas: ${calc.gP}g, Carboidratos: ${calc.gC}g, Gorduras: ${calc.gG}g)`;
+              setObservacoes((prev) => {
+                if (!prev) return metaStr;
+                if (prev.includes('Meta Prescrita:')) {
+                  return prev.replace(/• Meta Prescrita:[^\n]*/, metaStr);
+                }
+                return `${prev}\n${metaStr}`;
+              });
+              setSuccessMessage('Metas calculadas aplicadas aos campos de hábitos!');
+              setTimeout(() => setSuccessMessage(''), 4000);
+            }}
+          />
+        )}
       </div>
     </Layout>
   );

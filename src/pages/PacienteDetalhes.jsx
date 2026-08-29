@@ -5,6 +5,25 @@ import { useAuth } from '../contexts/AuthContext';
 import { sql } from '../lib/db';
 import WeightEvolutionChart from '../components/WeightEvolutionChart';
 import ImageUpload from '../components/ImageUpload';
+import GeradorPlanoAlimentar from '../components/GeradorPlanoAlimentar';
+import VisualizadorPlano from '../components/VisualizadorPlano';
+import CalculadoraMetabolica from '../components/CalculadoraMetabolica';
+import { 
+  CalculatorIcon, 
+  WhatsAppIcon, 
+  SparklesIcon, 
+  CheckIcon, 
+  PlusIcon, 
+  CalendarIcon, 
+  ScaleIcon, 
+  TrashIcon, 
+  ArrowLeftIcon, 
+  TargetIcon, 
+  HeartPulseIcon, 
+  UserIcon,
+  FlameIcon,
+  FileTextIcon
+} from '../components/Icons';
 
 export default function PacienteDetalhes() {
   const { id } = useParams();
@@ -17,6 +36,7 @@ export default function PacienteDetalhes() {
   const [successMessage, setSuccessMessage] = useState('');
   const [activeMainTab, setActiveMainTab] = useState('dados'); // 'dados' | 'consultas' | 'planos'
   const [activeSubTab, setActiveSubTab] = useState('pessoal'); // 'pessoal' | 'clinico' | 'habitos'
+  const [isCalculadoraOpen, setIsCalculadoraOpen] = useState(false);
 
   // Dados do Paciente (Formulário Editável)
   const [paciente, setPaciente] = useState(null);
@@ -73,7 +93,24 @@ export default function PacienteDetalhes() {
   const [planos, setPlanos] = useState([]);
   const [loadingPlanos, setLoadingPlanos] = useState(false);
   const [planoSelecionado, setPlanoSelecionado] = useState(null);
-  const [showGerarPlanoModal, setShowGerarPlanoModal] = useState(false);
+  const [isGerandoPlano, setIsGerandoPlano] = useState(false);
+
+  // Deletar Plano Alimentar
+  const handleDeletePlano = async (planoId) => {
+    if (!window.confirm('Tem certeza que deseja excluir este plano alimentar do histórico?')) return;
+    try {
+      await sql`DELETE FROM public.planos_alimentares WHERE id = ${planoId} AND paciente_id = ${id}`;
+      await fetchPlanos();
+      if (planoSelecionado?.id === planoId) {
+        setPlanoSelecionado(null);
+      }
+      setSuccessMessage('Plano alimentar excluído com sucesso.');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Erro ao excluir plano alimentar:', err);
+      setError('Não foi possível excluir o plano alimentar.');
+    }
+  };
 
   // Opções pré-definidas
   const OPCOES_OBJETIVO = [
@@ -498,8 +535,33 @@ export default function PacienteDetalhes() {
           </div>
           <div className="header-button-group">
             <button onClick={() => navigate('/pacientes')} className="btn-secondary">
-              ← Voltar
+              <ArrowLeftIcon size={16} />
+              <span>Voltar</span>
             </button>
+
+            <button 
+              type="button" 
+              className="btn-secondary btn-calc-header" 
+              onClick={() => setIsCalculadoraOpen(true)}
+              title="Calcular TMB, GET e Macronutrientes"
+            >
+              <CalculatorIcon size={16} />
+              <span>Calculadora Metabólica</span>
+            </button>
+
+            {whatsapp && (
+              <a 
+                href={`https://wa.me/55${whatsapp.replace(/\D/g, '')}`} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="btn-secondary btn-whatsapp-header"
+                title="Conversar no WhatsApp com o paciente"
+              >
+                <WhatsAppIcon size={16} />
+                <span>WhatsApp</span>
+              </a>
+            )}
+
             {activeMainTab === 'dados' && (
               <button 
                 type="button" 
@@ -507,7 +569,8 @@ export default function PacienteDetalhes() {
                 disabled={savingPatient} 
                 className="btn-primary"
               >
-                {savingPatient ? 'Salvando...' : '✓ Salvar Alterações'}
+                <CheckIcon size={16} />
+                <span>{savingPatient ? 'Salvando...' : 'Salvar Alterações'}</span>
               </button>
             )}
             {activeMainTab === 'consultas' && (
@@ -516,7 +579,18 @@ export default function PacienteDetalhes() {
                 onClick={() => setIsModalConsultaOpen(true)} 
                 className="btn-primary"
               >
-                + Nova Consulta
+                <PlusIcon size={16} />
+                <span>Nova Consulta</span>
+              </button>
+            )}
+            {activeMainTab === 'planos' && !isGerandoPlano && (
+              <button 
+                type="button" 
+                onClick={() => setIsGerandoPlano(true)} 
+                className="btn-primary btn-sparkle"
+              >
+                <SparklesIcon size={16} />
+                <span>Gerar Plano com IA</span>
               </button>
             )}
           </div>
@@ -539,10 +613,7 @@ export default function PacienteDetalhes() {
                 className={`main-tab-btn ${activeMainTab === 'dados' ? 'active' : ''}`}
                 onClick={() => setActiveMainTab('dados')}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
+                <UserIcon size={18} />
                 <span>1. Dados do Paciente</span>
               </button>
 
@@ -551,9 +622,7 @@ export default function PacienteDetalhes() {
                 className={`main-tab-btn ${activeMainTab === 'consultas' ? 'active' : ''}`}
                 onClick={() => setActiveMainTab('consultas')}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                </svg>
+                <ScaleIcon size={18} />
                 <span>2. Consultas & Evolução ({consultas.length})</span>
               </button>
 
@@ -562,13 +631,7 @@ export default function PacienteDetalhes() {
                 className={`main-tab-btn ${activeMainTab === 'planos' ? 'active' : ''}`}
                 onClick={() => setActiveMainTab('planos')}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                  <polyline points="10 9 9 9 8 9" />
-                </svg>
+                <CalendarIcon size={18} />
                 <span>3. Planos Alimentares ({planos.length})</span>
               </button>
             </div>
@@ -1215,93 +1278,149 @@ export default function PacienteDetalhes() {
                ========================================================= */}
             {activeMainTab === 'planos' && (
               <div className="section-planos-container animate-fade">
-                <div className="dash-card">
-                  <div className="list-card-header">
-                    <div className="list-title-box">
-                      <div className="stat-icon-wrapper orange">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                          <line x1="16" y1="13" x2="8" y2="13" />
-                          <line x1="16" y1="17" x2="8" y2="17" />
-                        </svg>
+                {isGerandoPlano ? (
+                  <GeradorPlanoAlimentar
+                    paciente={{
+                      id: paciente.id,
+                      nome,
+                      sexo,
+                      data_nascimento: dataNascimento,
+                      idade: idadeCalculada,
+                      peso: currentWeightForImc,
+                      peso_inicial: pesoInicial,
+                      altura: alturaCm,
+                      imc: imcCalculado,
+                      objetivos,
+                      objetivo_texto: objetivoTexto,
+                      nivel_atividade: nivelAtividade,
+                      atividade_fisica: atividadeFisica,
+                      atividade_fisica_descricao: atividadeFisicaDescricao,
+                      patologias,
+                      restricoes_alimentares: restricoes,
+                      alergias,
+                      medicamentos,
+                      suplementos,
+                      refeicoes_por_dia: refeicoesPorDia,
+                      horario_acorda: horarioAcorda,
+                      horario_dorme: horarioDorme,
+                      litros_agua: litrosAgua,
+                      observacoes
+                    }}
+                    onPlanoSalvo={async () => {
+                      await fetchPlanos();
+                      setIsGerandoPlano(false);
+                      setSuccessMessage('Plano alimentar salvo com sucesso no prontuário!');
+                      setTimeout(() => setSuccessMessage(''), 4000);
+                    }}
+                    onCancelar={() => setIsGerandoPlano(false)}
+                  />
+                ) : (
+                  <div className="dash-card">
+                    <div className="list-card-header">
+                      <div className="list-title-box">
+                        <div className="stat-icon-wrapper orange">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                            <polyline points="10 9 9 9 8 9" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="card-title">Planos Alimentares do Paciente</h3>
+                          <p className="card-subtitle">Histórico e prescrição de dietas personalizadas</p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="card-title">Planos Alimentares do Paciente</h3>
-                        <p className="card-subtitle">Histórico e prescrição de planos nutricionais personalizados</p>
-                      </div>
-                    </div>
 
-                    <button 
-                      type="button" 
-                      className="btn-primary"
-                      onClick={() => setShowGerarPlanoModal(true)}
-                    >
-                      🥗 Gerar Plano Alimentar
-                    </button>
-                  </div>
-
-                  {planos.length === 0 ? (
-                    <div className="empty-state">
-                      <svg className="empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <p>Nenhum plano alimentar gerado ainda</p>
-                      <span>Clique em "Gerar Plano Alimentar" para criar uma dieta personalizada para este paciente.</span>
-                    </div>
-                  ) : (
-                    <div className="planos-history-grid">
-                      {planos.map((plano) => (
-                        <div 
-                          key={plano.id} 
-                          className={`plano-card-item ${planoSelecionado?.id === plano.id ? 'active' : ''}`}
-                          onClick={() => setPlanoSelecionado(plano)}
+                      <div className="planos-header-actions-group">
+                        <button 
+                          type="button" 
+                          className="btn-primary btn-sparkle"
+                          onClick={() => setIsGerandoPlano(true)}
                         >
-                          <div className="plano-card-header">
-                            <span className="plano-tag">Plano Nutricional</span>
-                            <span className="plano-date">{formatDate(plano.created_at)}</span>
-                          </div>
-                          <h4 className="plano-title">
-                            {plano.conteudo?.titulo || `Plano de ${formatDate(plano.created_at)}`}
-                          </h4>
-                          <p className="plano-preview-text">
-                            {plano.conteudo?.descricao || `${plano.conteudo?.refeicoes?.length || 0} refeições planejadas`}
-                          </p>
-                          <button type="button" className="btn-view-plano-link">
-                            Visualizar conteúdo completo →
+                          ✨ Gerar Plano com IA
+                        </button>
+                      </div>
+                    </div>
+
+                    {loadingPlanos ? (
+                      <div className="dashboard-loading" style={{ padding: '2rem 0' }}>
+                        <div className="spinner"></div>
+                        <p>Carregando histórico de planos...</p>
+                      </div>
+                    ) : planos.length === 0 ? (
+                      <div className="empty-state">
+                        <svg className="empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p>Nenhum plano alimentar gerado ainda</p>
+                        <span>Clique no botão abaixo para acionar a inteligência artificial e prescrever um cardápio semanal.</span>
+                        <div style={{ marginTop: '1.25rem' }}>
+                          <button 
+                            type="button" 
+                            className="btn-primary btn-sparkle"
+                            onClick={() => setIsGerandoPlano(true)}
+                          >
+                            ✨ Gerar Primeiro Plano com IA
                           </button>
                         </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Modal de visualização detalhada do plano selecionado */}
-                  {planoSelecionado && (
-                    <div className="plano-viewer-modal-backdrop" onClick={() => setPlanoSelecionado(null)}>
-                      <div className="plano-viewer-modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                          <div>
-                            <h3>{planoSelecionado.conteudo?.titulo || 'Plano Alimentar'}</h3>
-                            <span className="modal-subtitle">Criado em {formatDate(planoSelecionado.created_at)}</span>
-                          </div>
-                          <button type="button" className="btn-close-modal" onClick={() => setPlanoSelecionado(null)}>✕</button>
-                        </div>
-                        <div className="modal-body plano-detail-content">
-                          {typeof planoSelecionado.conteudo === 'object' ? (
-                            <pre className="json-formatted-view">
-                              {JSON.stringify(planoSelecionado.conteudo, null, 2)}
-                            </pre>
-                          ) : (
-                            <p>{String(planoSelecionado.conteudo)}</p>
-                          )}
-                        </div>
-                        <div className="modal-footer">
-                          <button type="button" className="btn-secondary" onClick={() => setPlanoSelecionado(null)}>Fechar</button>
-                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    ) : (
+                      <div className="planos-history-grid">
+                        {planos.map((plano) => {
+                          const conteudo = plano.conteudo || {};
+                          const totalDias = conteudo.plano_semanal?.length || 0;
+                          const isIA = conteudo.criado_com_ia !== false;
+
+                          return (
+                            <div 
+                              key={plano.id} 
+                              className="plano-card-item"
+                              onClick={() => setPlanoSelecionado(plano)}
+                            >
+                              <div className="plano-card-header">
+                                <span className={`plano-tag ${isIA ? 'ia-tag' : ''}`}>
+                                  {isIA ? '✨ Gerado com IA' : '✍️ Nutricional'}
+                                </span>
+                                <span className="plano-date">{formatDate(plano.created_at)}</span>
+                              </div>
+                              <h4 className="plano-title">
+                                {conteudo.titulo || `Plano Semanal (${formatDate(plano.created_at)})`}
+                              </h4>
+                              <p className="plano-preview-text">
+                                {conteudo.observacoes || (totalDias > 0 ? `${totalDias} dias planejados com refeições completas.` : 'Plano estruturado de refeições.')}
+                              </p>
+                              <div className="plano-card-footer">
+                                <button 
+                                  type="button" 
+                                  className="btn-view-plano-link"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPlanoSelecionado(plano);
+                                  }}
+                                >
+                                  Visualizar cardápio →
+                                </button>
+                                <button 
+                                  type="button" 
+                                  className="btn-delete-plano-icon"
+                                  title="Excluir este plano"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeletePlano(plano.id);
+                                  }}
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1441,28 +1560,48 @@ export default function PacienteDetalhes() {
           </div>
         )}
 
-        {/* Modal Info Gerar Plano */}
-        {showGerarPlanoModal && (
-          <div className="modal-backdrop" onClick={() => setShowGerarPlanoModal(false)}>
-            <div className="modal-card animate-fade" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <div>
-                  <h3 className="modal-title">Gerador de Planos Alimentares</h3>
-                  <p className="modal-subtitle">Módulo inteligente de prescrição nutricional</p>
-                </div>
-                <button type="button" className="btn-close-modal" onClick={() => setShowGerarPlanoModal(false)}>✕</button>
-              </div>
-              <div className="modal-body" style={{ padding: '1.5rem 1.75rem', lineHeight: '1.6' }}>
-                <p>O módulo de geração e inteligência de planos alimentares será conectado no próximo passo (Prompt 6).</p>
-                <p style={{ marginTop: '0.75rem', color: 'var(--text-muted)' }}>
-                  Os dados do paciente (calorias, restrições, alergias e metas) já estão todos prontos e estruturados no prontuário para a criação do plano!
-                </p>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn-primary" onClick={() => setShowGerarPlanoModal(false)}>Entendido</button>
-              </div>
-            </div>
-          </div>
+        {/* Modal de visualização detalhada do plano selecionado */}
+        {planoSelecionado && (
+          <VisualizadorPlano 
+            plano={planoSelecionado}
+            paciente={{
+              id: paciente?.id,
+              nome: nome || paciente?.nome,
+              whatsapp: whatsapp || paciente?.whatsapp
+            }}
+            onClose={() => setPlanoSelecionado(null)}
+            onExcluir={handleDeletePlano}
+          />
+        )}
+
+        {/* Modal da Calculadora Metabólica & Macros */}
+        {isCalculadoraOpen && (
+          <CalculadoraMetabolica
+            paciente={{
+              nome: nome || paciente?.nome,
+              sexo: sexo || paciente?.sexo,
+              idade: idadeCalculada,
+              peso: currentWeightForImc,
+              peso_inicial: pesoInicial,
+              altura: alturaCm
+            }}
+            onClose={() => setIsCalculadoraOpen(false)}
+            onAplicarMeta={(calc) => {
+              if (calc.aguaRecomendada) {
+                setLitrosAgua(calc.aguaRecomendada);
+              }
+              const metaStr = `• Meta Prescrita: ${calc.metaCalorica} kcal/dia (Proteínas: ${calc.gP}g, Carboidratos: ${calc.gC}g, Gorduras: ${calc.gG}g)`;
+              setObservacoes((prev) => {
+                if (!prev) return metaStr;
+                if (prev.includes('Meta Prescrita:')) {
+                  return prev.replace(/• Meta Prescrita:[^\n]*/, metaStr);
+                }
+                return `${prev}\n${metaStr}`;
+              });
+              setSuccessMessage('Metas calóricas e hídricas aplicadas aos dados do prontuário!');
+              setTimeout(() => setSuccessMessage(''), 4000);
+            }}
+          />
         )}
       </div>
     </Layout>

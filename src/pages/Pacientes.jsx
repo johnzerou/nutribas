@@ -1,8 +1,27 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { sql } from '../lib/db';
+import { 
+  UsersIcon, 
+  SearchIcon, 
+  PlusIcon, 
+  TargetIcon, 
+  CalendarIcon, 
+  ArrowRightIcon, 
+  WhatsAppIcon,
+  FilterIcon
+} from '../components/Icons';
+
+const OBJETIVO_FILTERS = [
+  'Todos',
+  'Emagrecer',
+  'Ganhar massa',
+  'Saúde geral',
+  'Reeducação alimentar',
+  'Performance esportiva'
+];
 
 export default function Pacientes() {
   const { user } = useAuth();
@@ -10,6 +29,8 @@ export default function Pacientes() {
 
   const [pacientes, setPacientes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedObjectiveFilter, setSelectedObjectiveFilter] = useState('Todos');
+  const [sortBy, setSortBy] = useState('nome_asc');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -57,9 +78,40 @@ export default function Pacientes() {
     loadPacientes();
   }, [user]);
 
-  const filteredPacientes = pacientes.filter(p => 
-    p.nome.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPacientes = useMemo(() => {
+    let result = pacientes.filter(p => {
+      const matchSearch = p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (p.whatsapp && p.whatsapp.includes(searchTerm));
+
+      if (!matchSearch) return false;
+
+      if (selectedObjectiveFilter !== 'Todos') {
+        const objs = Array.isArray(p.objetivos) ? p.objetivos : [];
+        const hasObj = objs.some(o => o.toLowerCase().includes(selectedObjectiveFilter.toLowerCase())) ||
+          (p.objetivo_texto && p.objetivo_texto.toLowerCase().includes(selectedObjectiveFilter.toLowerCase()));
+        if (!hasObj) return false;
+      }
+
+      return true;
+    });
+
+    if (sortBy === 'nome_asc') {
+      result.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    } else if (sortBy === 'nome_desc') {
+      result.sort((a, b) => (b.nome || '').localeCompare(a.nome || ''));
+    } else if (sortBy === 'recentes') {
+      result.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    } else if (sortBy === 'ultima_consulta') {
+      result.sort((a, b) => {
+        if (!a.ultima_consulta) return 1;
+        if (!b.ultima_consulta) return -1;
+        return new Date(b.ultima_consulta) - new Date(a.ultima_consulta);
+      });
+    }
+
+    return result;
+  }, [pacientes, searchTerm, selectedObjectiveFilter, sortBy]);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Sem consultas';
@@ -75,47 +127,78 @@ export default function Pacientes() {
     if (p.objetivo_texto) {
       list.push(p.objetivo_texto);
     }
-    if (list.length === 0) return 'Não informado';
-    return list.join(', ');
+    if (list.length === 0) return 'Nutrição Geral';
+    return list.slice(0, 2).join(' • ');
   };
 
   return (
     <Layout>
-      <div className="patients-page">
+      <div className="patients-page animate-fade">
         <div className="page-header-actions">
           <div>
             <h1 className="page-title">Pacientes</h1>
-            <p className="page-subtitle">Gerencie os pacientes cadastrados e seus históricos clínicos.</p>
+            <p className="page-subtitle">Gerencie os pacientes cadastrados, acompanhamentos clínicos e dietas com IA.</p>
           </div>
           <Link to="/pacientes/novo" className="btn-primary btn-add-patient">
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-            </svg>
-            Novo Paciente
+            <PlusIcon size={18} />
+            <span>Novo Paciente</span>
           </Link>
         </div>
 
-        {/* Barra de pesquisa e estatísticas rápidas */}
-        <div className="patients-toolbar">
-          <div className="search-box">
-            <svg className="search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input 
-              type="text" 
-              placeholder="Buscar paciente por nome..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="search-input"
-            />
-            {searchTerm && (
-              <button className="btn-clear-search" onClick={() => setSearchTerm('')}>
-                ✕
-              </button>
-            )}
+        {/* Barra de pesquisa e filtros */}
+        <div className="patients-toolbar-card">
+          <div className="patients-toolbar-top">
+            <div className="search-box">
+              <SearchIcon className="search-icon" size={18} />
+              <input 
+                type="text" 
+                placeholder="Buscar por nome, email ou whatsapp..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="search-input"
+              />
+              {searchTerm && (
+                <button className="btn-clear-search" onClick={() => setSearchTerm('')}>
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="sort-box">
+              <span className="sort-label">Ordenar por:</span>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
+                <option value="nome_asc">Nome (A - Z)</option>
+                <option value="nome_desc">Nome (Z - A)</option>
+                <option value="recentes">Mais recentes</option>
+                <option value="ultima_consulta">Última consulta</option>
+              </select>
+            </div>
           </div>
+
+          {/* Chips de filtro por Objetivo */}
+          <div className="filter-chips-row">
+            <span className="filter-chips-label">
+              <FilterIcon size={14} />
+              <span>Objetivo:</span>
+            </span>
+            <div className="filter-chips-list">
+              {OBJETIVO_FILTERS.map((obj) => (
+                <button
+                  key={obj}
+                  type="button"
+                  className={`filter-chip-btn ${selectedObjectiveFilter === obj ? 'active' : ''}`}
+                  onClick={() => setSelectedObjectiveFilter(obj)}
+                >
+                  {obj}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="results-count-bar">
           <span className="results-count">
-            {filteredPacientes.length} {filteredPacientes.length === 1 ? 'paciente' : 'pacientes'}
+            Exibindo {filteredPacientes.length} de {pacientes.length} {pacientes.length === 1 ? 'paciente' : 'pacientes'}
           </span>
         </div>
 
@@ -128,19 +211,29 @@ export default function Pacientes() {
           </div>
         ) : pacientes.length === 0 ? (
           <div className="empty-state">
-            <svg className="empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
+            <UsersIcon size={48} className="text-muted" />
             <p>Nenhum paciente cadastrado ainda</p>
-            <span>Cadastre seu primeiro paciente para começar a gerenciar consultas e planos alimentares.</span>
+            <span>Cadastre seu primeiro paciente para começar a prescrever cardápios inteligentes e acompanhar a evolução.</span>
             <Link to="/pacientes/novo" className="btn-primary" style={{ marginTop: '1.25rem' }}>
-              Cadastrar Primeiro Paciente
+              <PlusIcon size={16} />
+              <span>Cadastrar Primeiro Paciente</span>
             </Link>
           </div>
         ) : filteredPacientes.length === 0 ? (
           <div className="empty-state">
-            <p>Nenhum paciente encontrado com o nome "{searchTerm}"</p>
-            <span>Tente buscar por outro termo ou limpe o campo de busca.</span>
+            <p>Nenhum paciente encontrado com esses filtros.</p>
+            <span>Tente limpar a busca ou selecionar outro objetivo.</span>
+            <button 
+              type="button" 
+              className="btn-secondary" 
+              style={{ marginTop: '1rem' }}
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedObjectiveFilter('Todos');
+              }}
+            >
+              Limpar Filtros
+            </button>
           </div>
         ) : (
           <div className="patients-grid-list">
@@ -173,14 +266,20 @@ export default function Pacientes() {
 
                 <div className="patient-card-info-row">
                   <div className="info-block">
-                    <span className="info-label">Objetivo</span>
+                    <span className="info-label">
+                      <TargetIcon size={12} />
+                      <span>Objetivo</span>
+                    </span>
                     <span className="info-value objective-tag">
                       {formatObjetivos(paciente)}
                     </span>
                   </div>
 
                   <div className="info-block">
-                    <span className="info-label">Última consulta</span>
+                    <span className="info-label">
+                      <CalendarIcon size={12} />
+                      <span>Última consulta</span>
+                    </span>
                     <span className={`info-value date-tag ${paciente.ultima_consulta ? 'has-date' : 'no-date'}`}>
                       {formatDate(paciente.ultima_consulta)}
                     </span>
@@ -188,11 +287,21 @@ export default function Pacientes() {
                 </div>
 
                 <div className="patient-card-footer">
+                  {paciente.whatsapp && (
+                    <a
+                      href={`https://wa.me/55${paciente.whatsapp.replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="patient-card-whatsapp"
+                      onClick={(e) => e.stopPropagation()}
+                      title="Chamar no WhatsApp"
+                    >
+                      <WhatsAppIcon size={15} />
+                    </a>
+                  )}
                   <span className="view-profile-link">
-                    Acessar perfil
-                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                    </svg>
+                    <span>Acessar perfil</span>
+                    <ArrowRightIcon size={14} />
                   </span>
                 </div>
               </div>

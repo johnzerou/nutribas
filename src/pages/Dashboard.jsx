@@ -1,8 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { sql } from '../lib/db';
+import { 
+  UsersIcon, 
+  CalendarIcon, 
+  SparklesIcon, 
+  ArrowRightIcon, 
+  WhatsAppIcon, 
+  PlusIcon,
+  FlameIcon,
+  CheckIcon
+} from '../components/Icons';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -11,6 +21,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [totalPacientes, setTotalPacientes] = useState(0);
   const [consultasSemana, setConsultasSemana] = useState(0);
+  const [totalPlanos, setTotalPlanos] = useState(0);
   const [pacientesSemRetorno, setPacientesSemRetorno] = useState([]);
   const [error, setError] = useState(null);
 
@@ -29,8 +40,7 @@ export default function Dashboard() {
         `;
         setTotalPacientes(pacientesCountRes[0]?.total || 0);
 
-        // 2. Consultas da semana atual (iniciando segunda-feira ou últimos 7 dias / semana ISO)
-        // Usamos date_trunc('week', CURRENT_DATE) até o fim da semana
+        // 2. Consultas da semana atual
         const consultasSemanaRes = await sql`
           SELECT count(c.id)::int as total
           FROM public.consultas c
@@ -41,9 +51,16 @@ export default function Dashboard() {
         `;
         setConsultasSemana(consultasSemanaRes[0]?.total || 0);
 
-        // 3. Pacientes sem retorno:
-        // Pacientes cuja última consulta foi há mais de 30 dias (ou seja, data_consulta < CURRENT_DATE - 30 days)
-        // e que não possuem próximo retorno agendado (proximo_retorno IS NULL ou proximo_retorno < CURRENT_DATE)
+        // 3. Total de planos alimentares criados
+        const planosCountRes = await sql`
+          SELECT count(pl.id)::int as total
+          FROM public.planos_alimentares pl
+          JOIN public.pacientes p ON p.id = pl.paciente_id
+          WHERE p.nutricionista_id = ${user.id}
+        `;
+        setTotalPlanos(planosCountRes[0]?.total || 0);
+
+        // 4. Pacientes sem retorno (> 30 dias)
         const semRetornoRes = await sql`
           WITH UltimasConsultas AS (
             SELECT 
@@ -93,7 +110,7 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="dashboard-view">
+      <div className="dashboard-view animate-fade">
         {error && <div className="error-banner">{error}</div>}
 
         {loading ? (
@@ -107,9 +124,7 @@ export default function Dashboard() {
             <div className="dash-card stat-card">
               <div className="stat-card-header">
                 <div className="stat-icon-wrapper red">
-                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
+                  <UsersIcon size={22} />
                 </div>
                 <span className="stat-tag">Total Cadastrado</span>
               </div>
@@ -118,7 +133,10 @@ export default function Dashboard() {
                 <p className="stat-label">Total de pacientes ativos</p>
               </div>
               <div className="stat-footer">
-                <span>Vinculados ao seu perfil</span>
+                <Link to="/pacientes" className="stat-link">
+                  <span>Ver todos os pacientes</span>
+                  <ArrowRightIcon size={14} />
+                </Link>
               </div>
             </div>
 
@@ -126,9 +144,7 @@ export default function Dashboard() {
             <div className="dash-card stat-card">
               <div className="stat-card-header">
                 <div className="stat-icon-wrapper orange">
-                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
+                  <CalendarIcon size={22} />
                 </div>
                 <span className="stat-tag">Esta semana</span>
               </div>
@@ -141,17 +157,52 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Card 3: Pacientes sem retorno */}
-            <div className="dash-card list-card">
+            {/* Card 3: Planos Alimentares Criados */}
+            <div className="dash-card stat-card">
+              <div className="stat-card-header">
+                <div className="stat-icon-wrapper purple" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7' }}>
+                  <SparklesIcon size={22} />
+                </div>
+                <span className="stat-tag">Prescrições com IA</span>
+              </div>
+              <div className="stat-body">
+                <h3 className="stat-number">{totalPlanos}</h3>
+                <p className="stat-label">Planos alimentares no prontuário</p>
+              </div>
+              <div className="stat-footer">
+                <span>Cardápios inteligentes</span>
+              </div>
+            </div>
+
+            {/* Card 4: Ações Rápidas do Nutricionista */}
+            <div className="dash-card quick-actions-card" style={{ gridColumn: 'span 3' }}>
+              <div className="quick-actions-bar">
+                <div className="quick-actions-info">
+                  <h4>Atalhos Rápidos</h4>
+                  <p>Inicie novos atendimentos ou acesse prontuários rapidamente</p>
+                </div>
+                <div className="quick-actions-buttons">
+                  <Link to="/pacientes/novo" className="btn-primary">
+                    <PlusIcon size={16} />
+                    <span>Cadastrar Novo Paciente</span>
+                  </Link>
+                  <Link to="/pacientes" className="btn-secondary">
+                    <UsersIcon size={16} />
+                    <span>Buscar Paciente</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 5: Pacientes sem retorno */}
+            <div className="dash-card list-card" style={{ gridColumn: 'span 3' }}>
               <div className="list-card-header">
                 <div className="list-title-box">
                   <div className="stat-icon-wrapper yellow">
-                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                    <CalendarIcon size={20} />
                   </div>
                   <div>
-                    <h3 className="card-title">Pacientes sem retorno</h3>
+                    <h3 className="card-title">Pacientes que precisam de retorno</h3>
                     <p className="card-subtitle">Última consulta há mais de 30 dias sem retorno agendado</p>
                   </div>
                 </div>
@@ -160,28 +211,24 @@ export default function Dashboard() {
                 )}
               </div>
 
-              <div className="list-card-body">
+              <div className="list-body">
                 {pacientesSemRetorno.length === 0 ? (
-                  <div className="empty-state">
-                    <svg className="empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p>Nenhum paciente sem retorno no momento</p>
-                    <span>Todos os seus pacientes estão em dia com consultas ou retornos agendados!</span>
+                  <div className="empty-state-small">
+                    <CheckIcon size={20} className="text-primary" />
+                    <span>Nenhum paciente pendente de retorno no momento. Todos em dia!</span>
                   </div>
                 ) : (
                   <ul className="patient-list">
                     {pacientesSemRetorno.map((paciente) => (
-                      <li 
-                        key={paciente.id} 
-                        className="patient-list-item"
-                        onClick={() => handlePatientClick(paciente.id)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => e.key === 'Enter' && handlePatientClick(paciente.id)}
-                      >
-                        <div className="patient-main-info">
-                          <div className="patient-avatar-mini" style={{ overflow: 'hidden', padding: 0 }}>
+                      <li key={paciente.id} className="patient-list-item">
+                        <div 
+                          className="patient-info-group clickable" 
+                          onClick={() => handlePatientClick(paciente.id)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => e.key === 'Enter' && handlePatientClick(paciente.id)}
+                        >
+                          <div className="patient-avatar-badge" style={{ overflow: 'hidden', padding: 0 }}>
                             {paciente.foto_url ? (
                               <img 
                                 src={paciente.foto_url} 
@@ -192,20 +239,38 @@ export default function Dashboard() {
                               paciente.nome.charAt(0).toUpperCase()
                             )}
                           </div>
-                          <div>
-                            <span className="patient-name-link">{paciente.nome}</span>
-                            <span className="patient-extra-text">
-                              Última consulta: {formatDate(paciente.ultima_consulta_data)}
+                          <div className="patient-names">
+                            <h4 className="patient-name">{paciente.nome}</h4>
+                            <span className="patient-meta">
+                              Última consulta: <strong>{formatDate(paciente.ultima_consulta_data)}</strong>
                             </span>
                           </div>
                         </div>
-                        <div className="patient-action">
-                          <span className="btn-view-profile">
-                            Ver perfil
-                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                            </svg>
-                          </span>
+
+                        <div className="patient-actions">
+                          {paciente.whatsapp ? (
+                            <a 
+                              href={`https://wa.me/55${paciente.whatsapp.replace(/\D/g, '')}?text=Olá%20${encodeURIComponent(paciente.nome.split(' ')[0])},%20aqui%20é%20seu%20nutricionista!%20Como%20está%20sua%20evolução?%20Vamos%20agendar%20seu%20retorno?`}
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="btn-whatsapp-action"
+                              title="Enviar mensagem de retorno no WhatsApp"
+                            >
+                              <WhatsAppIcon size={15} />
+                              <span>Chamar no WhatsApp</span>
+                            </a>
+                          ) : (
+                            <span className="no-whatsapp-label">Sem WhatsApp</span>
+                          )}
+
+                          <button 
+                            className="btn-view-patient"
+                            onClick={() => handlePatientClick(paciente.id)}
+                            title="Acessar prontuário do paciente"
+                          >
+                            <span>Ver Prontuário</span>
+                            <ArrowRightIcon size={14} />
+                          </button>
                         </div>
                       </li>
                     ))}
